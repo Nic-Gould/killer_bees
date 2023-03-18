@@ -93,18 +93,18 @@ fn main(){
     impl RigidBody{
         fn init(body_type: BodyType)->RigidBody{	// I think? I'd like to be able to pass a rocket/missile or plane.
             RigidBody{
-            body_type = BodyType,
+            body_type: BodyType,
         // initialisation values for structs can use a lookup based on type? 
         //maybe have one plane, one missile and one rocket type for prototyping/ 
         // only relevant for some stucts, TBD.
-            control_surfaces = ControlSurfaces::new(body_type),		
-            dimensional_characteristics = DimensionalCharacteristics::new(body_type),
-            coefficients = Coefficients::new(body_type),
+            control_surfaces: ControlSurfaces::new(body_type),		
+            dimensional_characteristics: DimensionalCharacteristics::new(body_type),
+            coefficients: Coefficients::new(body_type),
             
-            body_reference = BodyReference::new(body_type),
-            ground_reference = GroundReference::new(body_type),
-            forces = Forces::new(body_type),
-            flight = Flight::new(body_type),
+            body_reference:  BodyReference::new(body_type),
+            ground_reference: GroundReference::new(body_type),
+            forces: Forces::new(body_type),
+            flight: Flight::new(body_type),
             }
         }
     
