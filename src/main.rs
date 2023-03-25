@@ -1,5 +1,7 @@
+use ndarray::*;
+
 fn main(){
-/*     struct RigidBody{
+/*     struct FlightBody{
         body_type: BodyType,
         control_surfaces: ControlSurfaces,
         dimensional_characteristics: DimensionalCharacteristics,
@@ -53,7 +55,7 @@ fn main(){
         velocity:[f32;3],	//vx,vy,vz
         acceleration:[f32;3],
         
-        orientation:[f32;3],	//roll, pitch, yaw - actually there's no yaw in the BCS, kooky.
+        orientation:[f32;3],	
         angular_velocity:[f32;3],	//roll, pitch, yaw
         angular_acceleration:[f32;3],	//roll, pitch, yaw
         
@@ -77,7 +79,25 @@ fn main(){
         //
 
     }
-    struct RigidBody{
+    struct InitCond{
+        // init conditions describe the orientation and velocity of the flight_body at t=0
+        // for initial build this will be ground launch only
+        // for later builds maybe add option to start with an altidute and velicity
+        //  where flight is assumed to be steady and stable with no accelerations or angular rates at t=0,
+        //	might also need to initialise with a displacement vector of multiple flight bodies are being initialised at t=0	
+            roll:f32,
+            pitch:f32,
+            yaw:f32,
+        }
+        
+    struct FlightBody{
+        ahrs:AHRS,
+        forces:Forces,
+        quat:Quat,
+        dimensions:Dimensions,
+    
+    }
+    struct FlightBody{
         body_type: BodyType,
         control_surfaces: ControlSurfaces,
         dimensional_characteristics: DimensionalCharacteristics,
@@ -89,10 +109,54 @@ fn main(){
         flight:Flight,
     
     }
+    struct <T> AHRS{
+        where T impl Coord_system;
+        x:T,					
+        y:T,					
+        z:T,					
     
-    impl RigidBody{
-        fn init(body_type: BodyType)->RigidBody{	// I think? I'd like to be able to pass a rocket/missile or plane.
-            RigidBody{
+        roll:T,					
+        pitch:T,
+        yaw:T,
+    }	
+    struct <T>Dynamics<T>{
+        where T impl Coord_system;
+        force_x: T,
+        force_y: T,
+        force_z: T,
+        
+        accel_x:T,
+        accel_y:T,
+        accel_z:T,
+        
+        vel_x:T,
+        vel_y:T,
+        vel_z:T,
+        
+        moment_x:T,
+        moment_y:T,
+        moment_z:T,
+        
+        ang_accel_x:T,
+        ang_accel_y:T,
+        ang_accel_z:T,
+        
+        ang_vel_x:T,
+        ang_vel_y:T,
+        ang_vel_z:T,
+        
+    }
+    
+    trait	Coord_System;
+    struct Body_Ref(i32); 
+    struct Ground_Ref(i32);
+    struct Wind_Ref(i32);
+    struct Stability_Ref(i32);
+    impl Coord_System for Body_Ref, Ground_Ref,Wind_Ref, Stability_Ref;
+    
+    impl FlightBody{
+        fn init(body_type: BodyType)->FlightBody{	// I think? I'd like to be able to pass a rocket/missile or plane.
+            FlightBody{
             body_type: BodyType,
         // initialisation values for structs can use a lookup based on type? 
         //maybe have one plane, one missile and one rocket type for prototyping/ 
@@ -135,30 +199,19 @@ fn main(){
     
         fn convert_reference_frame(&self){
             
-            //quaternion magic, steal from MPU driver.
-     /*        fn to_ref_frame(q:[f32;4])-> &[f32;6]{
-                let a12 =   2.0_f32 * (q[1] * q[2] + q[0] * q[3]);
-                let a22 =   q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3];
-                let a31 =   2.0_f32 * (q[0] * q[1] + q[2] * q[3]);
-                let a32 =   2.0_f32 * (q[1] * q[3] - q[0] * q[2]);
-                let a33 =   q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
-                let pitch = -f32::asin(a32);
-                let roll  = f32::atan2(a31, a33);
-                let yaw   = f32::atan2(a12, a22);
-                pitch *= DEG;
-                yaw   *= DEG;
-                yaw   += declination; // 
-                if yaw < 0.0 {yaw   += 360.0}; // Ensure yaw stays between 0 and 360
-                roll  *= DEG;
-                
-                let lin_ax = ax + a31;
-                let lin_ay = ay + a32;
-                let lin_az = az - a33;
-                &[pitch, yaw, roll, lin_ax, lin_ay, lin_az]
-            } */
+       
         }
     
         fn update_forces(&self){
+            	//total non-gravitational forces
+/* 	FAPB[0]=pdynmc*refa*cxt+thrust;
+	FAPB[1]=pdynmc*refa*cyt;
+	FAPB[2]=pdynmc*refa*czt;
+	
+	//aerodynamic moment
+	FMB[0]=pdynmc*refa*refb*clt;
+	FMB[1]=pdynmc*refa*refc*cmt;
+	FMB[2]=pdynmc*refa*refb*cnt; */
             let duplicated_calculation =	self.control_surfaces.elevator *((self.ground_reference.velocity_total + self.flight.tailwind)/self.ground_reference.velocity_total).powi(2)
                         * self.flight.dynamic_pressure*self.dimensional_characteristics.wing_surface_area;
             
@@ -182,7 +235,47 @@ fn main(){
             let f_z = - lift * cos(self.ground_reference.angle_of_attack) - drag * sin(self.ground_reference.angle_of_attack);								                    //eq3.8
             
         }
-
+        fn update_motion(flight:Dynamics, ahrs:AHRS, inertia_moments:arr2){ 
+            let accel_x: Body_Ref = g_on_w * flight.vel_x + grav*2*(ex*ez - ey*e0) 			+ (flight.ang_vel_z*flight.vel_y) - (flight.ang_vel_y*flight.vel_z);
+            let accel_y: Body_Ref = g_on_w * flight.vel_y + grav*2*(ey*ez - ex*eo) 			+ (flight.ang_vel_x*flight.vel_z) - (flight.ang_vel_z*flight.vel_x);
+            let accel_z: Body_Ref = g_on_w * flight.vel_z + grav*(ez*ez+e0*e0-ex*ex-ey*ey) 	+ (flight.ang_vel_y*flight.vel_x) - (flight.ang_vel_x*flight.vel_y);
+        
+            let vel_x: Body_Ref += accel_x * dt;
+            let vel_y: Body_Ref += accel_y * dt;
+            let vel_z: Body_Ref += accel_z * dt;
+        
+        //
+        //	LET THE DE-STUCTURING BEGIN!!!
+        //
+        
+        pq 	= 	ang_vel_x 	* ang_vel_y	; 
+        pr 	= 	ang_vel_x 	* ang_vel_z	;
+        qr	= 	ang_vel_y 	* ang_vel_z	;
+        qq	=	ang_accel_x	* ang_accel_x ;
+        pp	=	ang_accel_y * ang_accel_y ;
+        rr	=	ang_accel_z * ang_accel_z ;
+        
+        Ixx = inertia_moments[0][0];
+        Ixy = inertia_moments[0][1];
+        Ixz = inertia_moments[0][2];
+        Iyy = inertia_moments[1][1];
+        Iyz = inertia_moments[1][2];
+        Izz = inertia_moments[2][2];
+        
+        
+        ang_rates 	= arr1 (&	[flight.ang_vel_x, 	flight.ang_vel_y, 	flight.ang_vel_z]);
+        moments 	= arr1 (&	[flight.moment_x,	flight.moment_y,	flight.moment_z	]);
+        coriolis	= arr1 (&[	[(Iyy-Izz) * qr + Iyz * (qq - rr) + Ixz * pq + Ixy * pr	],
+                                [(Izz-Ixx) * pr + Ixz * (rr - pp) + Ixy * qr + Iyz * pq	],
+                                [(Iyy-Izz) * pq + Ixy * (pp - qq) + Iyz * pr + Ixz * qr	],
+                            ]);
+        
+        
+        ang_accel_x = inertia_moments.dot(&gyro.dot(&ang_rates)) + &moments+ &coriolis;
+        
+        ang_rates +=	ang_accel * dt;
+        
+        }
         fn update_flight(&self, environment:Environment){
           //  self.flight.tailwind = ;
           //  self.flight.altitude = ;
@@ -246,6 +339,74 @@ fn main(){
         else                       {  [71_000.0,    0.000064,    214.65, 	-0.002 	]}    
         
     }
+    let init_cond = InitCond{
+        roll:0.0,
+        pitch:0.0,
+        yaw:90.0,	//90 degree positive yaw = east facing launch
+    };
+    
+    struct Quat{
+        e0		:f32,
+        ex		:f32,
+        ey		:f32,
+        ez		:f32,
+        delta_e0:f32,
+        delta_ex:f32,
+        delta_ey:f32,
+        delta_ez:f32,
+    
+    }
+    impl Quat{ //need to define the launch_ahrs
+        fn init(init_cond:Init_Cond)->Quat{
+            roll 	= launch_ahrs[0];
+            pitch 	= launch_ahrs[1];
+            yaw 	= launch_ahrs[2];
+            
+            //quaternion initialization
+            spsi=sin(roll);
+            cpsi=cos(roll);
+            stht=sin(pitch);
+            ctht=cos(pitch);
+            sphi=sin(yaw);
+            cphi=cos(yaw);
+    
+            Quat{
+                e0:cpsi*ctht*cphi+spsi*stht*sphi,
+                ex:cpsi*ctht*sphi-spsi*stht*cphi,
+                ey:cpsi*stht*cphi+spsi*ctht*sphi,
+                ez:-cpsi*stht*sphi+spsi*ctht*cphi,
+                delta_e0:0,
+                delta_ex:0,
+                delta_ey:0,
+                delta_ez:0,
+            }
+        }
+        fn	update(ang_vel_x:Body_Ref,ang_vel_y:Body_Ref,ang_vel_z:Body_Ref,){
+            let int_step = model.params.int_step/2;
+            let erq	= 1.0-q0*q0+q1*q1+q2*q2+q3*q3;
+            
+            let new_delta_e0	=	0.5 * ((-ex*ang_vel_x) 	+ 	(ey*ang_vel_y)	+	(-ez*ang_vel_z));
+            let new_delta_ey	=	0.5 * ((ez*ang_vel_x)	+	(e0*ang_vel_y) 	-	(ex*ang_vel_z));
+            let new_delta_ez	=	0.5 * ((-ey*ang_vel_x) 	+	(ex*ang_vel_y) 	+	(e0*ang_vel_z));
+            let new_delta_ex	=	0.5 * ((e0*ang_vel_x) 	-	(ez*ang_vel_y)	+	(ey*ang_vel_z));
+            
+            e0 += (delta_e0+new_delta_e0)* erq * int_step;
+            ex += (delta_ex+new_delta_ey)* erq * int_step;
+            ey += (delta_ey+new_delta_ez)* erq * int_step;
+            ez += (delta_ez+new_delta_ex)* erq * int_step;
+    
+            delta_e0 = new_delta_e0;
+            delta_ex = new_delta_ey;
+            delta_ey = new_delta_ez;
+            delta_ez = new_delta_ex;
+        }	
+    
+    }
+        let inertia_moments = arr2 (&[
+            [12875,		0,		-1331.4	],
+            [0,			75673,	0		],
+            [-1331.4,	0,		85551	]
+        ]);	
 }
 
 
