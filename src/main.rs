@@ -90,13 +90,7 @@ fn main(){
             yaw:f32,
         }
         
-    struct FlightBody{
-        ahrs:AHRS,
-        forces:Forces,
-        quat:Quat,
-        dimensions:Dimensions,
-    
-    }
+ 
     struct FlightBody{
         body_type: BodyType,
         control_surfaces: ControlSurfaces,
@@ -107,7 +101,10 @@ fn main(){
         ground_reference: GroundReference,
         forces: Forces,
         flight:Flight,
-    
+        ahrs:AHRS,
+        forces:Forces,
+        quat:Quat,
+        dimensions:Dimensions,
     }
     struct <T> AHRS{
         where T impl Coord_system;
@@ -235,14 +232,14 @@ fn main(){
             let f_z = - lift * cos(self.ground_reference.angle_of_attack) - drag * sin(self.ground_reference.angle_of_attack);								                    //eq3.8
             
         }
-        fn update_motion(flight:Dynamics, ahrs:AHRS, inertia_moments:arr2){ 
-            let accel_x: Body_Ref = g_on_w * flight.vel_x + grav*2*(ex*ez - ey*e0) 			+ (flight.ang_vel_z*flight.vel_y) - (flight.ang_vel_y*flight.vel_z);
-            let accel_y: Body_Ref = g_on_w * flight.vel_y + grav*2*(ey*ez - ex*eo) 			+ (flight.ang_vel_x*flight.vel_z) - (flight.ang_vel_z*flight.vel_x);
-            let accel_z: Body_Ref = g_on_w * flight.vel_z + grav*(ez*ez+e0*e0-ex*ex-ey*ey) 	+ (flight.ang_vel_y*flight.vel_x) - (flight.ang_vel_x*flight.vel_y);
+        fn update_motion(flight:&Dynamics, ahrs:AHRS, inertia_moments:arr2){ 
+             flight.accel_x: Body_Ref = g_on_w * flight.vel_x + grav*2*(ex*ez - ey*e0) 			+ (flight.ang_vel_z*flight.vel_y) - (flight.ang_vel_y*flight.vel_z);
+             flight.accel_y: Body_Ref = g_on_w * flight.vel_y + grav*2*(ey*ez - ex*eo) 			+ (flight.ang_vel_x*flight.vel_z) - (flight.ang_vel_z*flight.vel_x);
+             flight.accel_z: Body_Ref = g_on_w * flight.vel_z + grav*(ez*ez+e0*e0-ex*ex-ey*ey) 	+ (flight.ang_vel_y*flight.vel_x) - (flight.ang_vel_x*flight.vel_y);
         
-            let vel_x: Body_Ref += accel_x * dt;
-            let vel_y: Body_Ref += accel_y * dt;
-            let vel_z: Body_Ref += accel_z * dt;
+             flight.vel_x: Body_Ref += accel_x * dt;
+             flight.vel_y: Body_Ref += accel_y * dt;
+             flight.vel_z: Body_Ref += accel_z * dt;
         
         //
         //	LET THE DE-STUCTURING BEGIN!!!
@@ -283,7 +280,7 @@ fn main(){
         }
 
         
-        }
+    }
     
     
     
