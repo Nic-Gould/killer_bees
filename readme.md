@@ -32,23 +32,3 @@ utility functions is just a matrix library, and air density calculator. Uses Bse
 class_function - literally just functions for building the classes and allocating memory.
 class_heirarchy- also param/method definitions.
 plane_functions - more io, mostly output this time.
-
-
-
-
-
-/* Aircraft (usually not missiles) operate at a nominally constant "trim" angle of attack. 
-The angle of the nose (the X Axis) does not align with the direction of the oncoming air. 
-The difference in these directions is the angle of attack. 
-Essentially, the body axis system is rotated about the Y body axis by the trim angle of attack and then "re-fixed" to the body of the aircraft:[1]
- */
- World / Earth / Ground Axis 
- 
- Body Axis
- 
- Stability axis = body axis + angle of attack about y. Aerodynamic coefficients are typically defined in the stability axis. 
- 
- Euler angles are not defined in the same axis set 
- (yaw is defined in earth axes, pitch is defined in intermediate axes 1, and roll is defined in intermediate axes 2).
- 
- Whenever we have rotation, we cannot simply treat absolute acceleration as the time derivative of velocities. 
