@@ -1,6 +1,6 @@
-
 use std::{f32::consts::PI, time::{SystemTime, Instant, Duration}};
 
+use evdev::{Device, Key};
 
 pub struct NASA_MODEL{
     weight:f32,
@@ -13,9 +13,12 @@ pub struct NASA_MODEL{
     wing_length:f32,
     centre_of_gravity:f32,
     theta: [f32;45],
-     
+
+    min_elevator:f32, 
     max_elevator:f32, 	
+    min_ailerons:f32,
     max_ailerons:f32,	
+    min_rudder:f32,
     max_rudder:f32,		
     max_thrust:u32 
 }
@@ -33,10 +36,15 @@ impl NASA_MODEL {
             wing_length:32.4,
             centre_of_gravity:0.1,
             theta: [0.025,-0.085,2.009,0.812,-1.046,34.81,1.736,14.85,-77.87,-13.89,0.099,0.0,0.0,0.031,0.099,-0.081,2.254,4.545,0.648,-8.237,-2.203,19.03,-25.83,-0.005,-0.202,0.058,-0.093,0.015,0.009,0.088,-0.272,-0.174,-4.315,15.47,-0.365,-18.25,0.848,0.581,0.102,-0.007,-0.282,-0.014,-0.046,0.086,-0.14],
-            max_elevator:0.0, 	
-            max_ailerons:0.0,	
-            max_rudder:0.0,		
-            max_thrust:0, 
+            
+            //these are based on the range of values tested, not the physical range of the control surfaces.
+            min_elevator:-20.0, 
+            max_elevator:10.0, 	
+            min_ailerons:-10.0,
+            max_ailerons:10.0,	
+            min_rudder:-30.0,
+            max_rudder:30.0,		
+            max_thrust:29160,
         };
         return F16XL;
     }
@@ -146,8 +154,12 @@ impl Dynamics {
   
     fn update(&mut self, model: &NASA_MODEL, dt:f32, environment:&Environment){
         
-        
+        self.airspeed = (self.vel_x.powf(2.0)+self.vel_y.powf(2.0)+self.vel_z.powf(2.0)).powf(0.5);
+        self.angle_of_attack = (self.vel_z/self.vel_x).asin();
+        self.sideslip = (self.vel_y/self.airspeed).acos();
        
+        
+        //redefines variables to improve function readability and reduce duplicate calculations.
         let v2          = self.airspeed*2.0;
         let alpha       = self.angle_of_attack;
         let alphaq      = alpha * self.ang_vel_y;
@@ -180,14 +192,16 @@ impl Dynamics {
         let coeff_pitch     =model.theta[29] + model.theta[30]*alpha + model.theta[31]*q_wave + model.theta[32]*de + model.theta[33]*alphaq + model.theta[34]*alpha2q + model.theta[35]*alpha2de + model.theta[36]*alpha3q + model.theta[37]*alpha3de+model.theta[38]*alpha4;
         let coeff_yaw       =model.theta[39]*beta + model.theta[40]*p_wave + model.theta[41]*r_wave + model.theta[42]*da + model.theta[43]*dr + model.theta[44]*beta2 + model.theta[45]*beta3;
         
-        let    pq 	= 	self.ang_vel_x 	* self.ang_vel_y	; 
-        let    pr 	= 	self.ang_vel_x 	* self.ang_vel_z	;
-        let    qr	= 	self.ang_vel_y 	* self.ang_vel_z	;
-        let    qq	=	self.ang_accel_x	* self.ang_accel_x ;
-        let    pp	=	self.ang_accel_y * self.ang_accel_y ;
-        let    rr	=	self.ang_accel_z * self.ang_accel_z ;
+        let    pq 	= 	self.ang_vel_x 	    *  self.ang_vel_y	; 
+        let    pr 	= 	self.ang_vel_x 	    *  self.ang_vel_z	;
+        let    qr	= 	self.ang_vel_y 	    *  self.ang_vel_z	;
+        let    qq	=	self.ang_accel_x	*  self.ang_accel_x ;
+        let    pp	=	self.ang_accel_y    *  self.ang_accel_y ;
+        let    rr	=	self.ang_accel_z    *  self.ang_accel_z ;
         
-           /*  (1) qdot =(cm*cbar*qbar_S-(IXX-IZZ)*pr -IXZ(pp-rr))/IYY;
+           /*  FROM COEFFICIENT DEFINITIONS IN NASA PAPER
+           
+           (1) qdot =(cm*cbar*qbar_S-(IXX-IZZ)*pr -IXZ(pp-rr))/IYY;
     
             (2) cl*qbar_S*b + IYY*qr+IXZ*pr -IXZ*qr = IXX*pdot -IXZ*rdot;
             
@@ -217,7 +231,7 @@ impl Dynamics {
         self.vel_y += self.accel_y * dt;
         self.vel_z += self.accel_z * dt;
 
-        
+     
         
         
     }
@@ -264,10 +278,10 @@ impl Quat{ //need to define the launch_ahrs
         let int_step = dt/2.0; //stepsize/2
         let erq	= 1.0-self.e0*self.e0+self.ex*self.ex+self.ey*self.ey+self.delta_ez*self.ez;
         
-        let new_delta_e0	=	0.5 * ((-self.ex*dynamics.ang_vel_x) 	+ 	(self.ey*dynamics.ang_vel_y)	+	(-self.ez*dynamics.ang_vel_z));
+        let new_delta_e0	=	0.5 * ((-self.ex*dynamics.ang_vel_x) 	- 	(self.ey*dynamics.ang_vel_y)	-	(self.ez*dynamics.ang_vel_z));
+        let new_delta_ex	=	0.5 * ((self.e0*dynamics.ang_vel_x) 	-	(self.ez*dynamics.ang_vel_y)	+	(self.ey*dynamics.ang_vel_z));
         let new_delta_ey	=	0.5 * ((self.ez*dynamics.ang_vel_x)	    +	(self.e0*dynamics.ang_vel_y) 	-	(self.ex*dynamics.ang_vel_z));
         let new_delta_ez	=	0.5 * ((-self.ey*dynamics.ang_vel_x) 	+	(self.ex*dynamics.ang_vel_y) 	+	(self.e0*dynamics.ang_vel_z));
-        let new_delta_ex	=	0.5 * ((self.e0*dynamics.ang_vel_x) 	-	(self.ez*dynamics.ang_vel_y)	+	(self.ey*dynamics.ang_vel_z));
         
         self.e0 += (self.delta_e0+new_delta_e0)* erq * int_step;
         self.ex += (self.delta_ex+new_delta_ey)* erq * int_step;
@@ -280,10 +294,10 @@ impl Quat{ //need to define the launch_ahrs
         self.delta_ez = new_delta_ex;
         
         let a12 =   2.0_f32 * (self.ex * self.ey + self.e0 * self.ez);
-        let a22 =   self.e0 * self.e0 + self.ex * self.ex - self.ey * self.ey - self.ez * self.ez;
         let a31 =   2.0_f32 * (self.e0 * self.ex + self.ey * self.ez);
         let a32 =   2.0_f32 * (self.ex * self.ez - self.e0 * self.ey);
-        let a33 =   self.e0 * self.e0 - self.ex * self.ex - self.ey * self.ey + self.ez * self.ez;
+        let a22 =   (self.e0*self.e0) + (self.ex*self.ex) - (self.ey*self.ey) - (self.ez*self.ez);
+        let a33 =   (self.e0*self.e0) - (self.ex*self.ex) - (self.ey*self.ey) + (self.ez*self.ez);
         
         dynamics.pitch = -f32::asin(a32);
         dynamics.roll  = f32::atan2(a31, a33);
@@ -382,23 +396,97 @@ impl Sim{
         }
     }
     pub async fn input(&mut self){
-        let keypress = "a";
-        match keypress{
-            
-            "w" => self.dynamics.ailerons+=1.0, 
-            "s" => self.dynamics.ailerons-=1.0,
-            
-            "a" =>  self.dynamics.rudder-=1.0,
-            "d" => self.dynamics.rudder+=1.0,
-            
-            "upArrow"   => self.dynamics.thrust += 1000.0,
-            "downArrow" => self.dynamics.thrust -= 1000.0,
-            
-            "leftArrow" => self.dynamics.rudder-=1.0,
-            "rightArrow"=> self.dynamics.rudder-=1.0,
-            _ => return,
+      
+        
+        let device = Device::open("/dev/input/event3").unwrap();
+    
+        let events = device.into_event_stream().unwrap();
+        let event = events.next_event().await?;
+
+        struct Keys{
+            W:u16,
+            S:u16,
+            A:u16,
+            D:u16,
+            UP:u16,
+            DOWN:u16,
+            LEFT:u16,
+            RIGHT:u16,
         }
-    }
+        let keys = Keys{
+            W:17,
+            S:31,
+            A:30,
+            D:32,
+            UP:106,
+            DOWN:108,
+            LEFT:105,
+            RIGHT:106,
+        };
+        enum KeyStates{
+            Down=0,
+            Up=1,
+        }
+        //TODO check sign convention for control surface deflections 
+        if self.dynamics.elevator<self.model.max_elevator{
+            if event.code()==keys.W{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.elevator+=1.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.elevator>self.model.min_elevator{
+            if event.code()==keys.S{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.elevator-=1.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.ailerons<self.model.max_ailerons{
+            if event.code()==keys.D{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.ailerons+=1.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.ailerons>self.model.min_ailerons{
+            if event.code()==keys.A{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.ailerons-=1.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.thrust<self.model.max_thrust as f32{
+            if event.code()==keys.UP{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.thrust+=1000.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.thrust>1000.0{
+            if event.code()==keys.DOWN{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.thrust-=1000.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.rudder>self.model.min_rudder{
+            if event.code()==keys.LEFT{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.rudder -=1.0;     //magic number TODO
+                } 
+            }
+        }
+        if self.dynamics.rudder<self.model.max_rudder{
+            if event.code()==keys.RIGHT{             //its the value AFTER addition that shouldnt exceed the threshold TODO
+                while event.value()==KeyStates::Down as i32{
+                   self.dynamics.rudder+=1.0;     //magic number TODO
+                } 
+            }
+        }
+
+        }
+            
     pub async fn update(&mut self){
         let now = Instant::now();
         self.dt = Instant::duration_since(&now, self.timer).as_secs_f32();
@@ -409,3 +497,4 @@ impl Sim{
         self.environment.update(self.dynamics.altitude);
     }
 }
+

@@ -1,12 +1,14 @@
-use init::init;
-use lib::Sim;
+use crate::init::init;
+use tokio::*;
+//use crate::sim::Sim;
 
 
 
 mod init;
-mod lib;
+mod sim;
 
-fn main(){
+#[tokio::main]
+async fn main(){
 
     let mut sim=init();
     sim.update();
